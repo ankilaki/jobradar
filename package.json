@@ -1,0 +1,19 @@
+{
+  "name": "jobradar",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "functions",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @jobradar/web",
+    "build": "npm run build -w @jobradar/shared && npm run build -w @jobradar/web",
+    "build:functions": "npm run build -w @jobradar/functions",
+    "test": "npm run test -w @jobradar/shared --if-present && npm run test -w @jobradar/functions --if-present && npm run test -w @jobradar/web --if-present",
+    "typecheck": "npm run typecheck -w @jobradar/shared --if-present && npm run typecheck -w @jobradar/web --if-present && npm run typecheck -w @jobradar/functions --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "ats": "greenhouse",
+    "boardToken": "anthropic",
+    "careersUrl": "https://www.anthropic.com/careers"
+  },
+  {
+    "id": "ashby",
+    "name": "Ashby",
+    "ats": "ashby",
+    "boardToken": "Ashby",
+    "careersUrl": "https://www.ashbyhq.com/careers"
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "boardToken": "stripe",
+    "careersUrl": "https://stripe.com/jobs"
+  }
+]

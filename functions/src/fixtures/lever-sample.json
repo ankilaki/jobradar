@@ -1,0 +1,54 @@
+[
+  {
+    "id": "4b028fa8-d525-4c7c-a323-21cb7edd6fad",
+    "text": "Account Executive 2",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Sales",
+      "location": "Chicago",
+      "team": "Sales",
+      "allLocations": [
+        "Chicago"
+      ]
+    },
+    "createdAt": 1778185777077,
+    "description": "<div><span style=\"font-size: 11pt; font-family: 'Google Sans', sans-serif; color: #1f1f1f;\">Are you a high-performing sales professional ready to scale our customers’ growth to the next level? As our next </span><strong><span style=\"font-size: 11pt; font-family: 'Google Sans', sans-serif; color: #1f1f1f;\">Account Executive 2</span></strong><span style=\"font-size: 11pt; font-family: 'Google Sans', sans-serif; color: #1f1f1f;\">, you won’t just be closing deals—you’ll be the primary architect of th",
+    "descriptionPlain": "Are you a high-performing sales professional ready to scale our customers’ growth to the next level? As our next Account Executive 2, you won’t just be closing deals—you’ll be the primary architect of the customer experience at ActiveCampaign. You will be at the forefront of our growth, partnering with businesses to transform their marketing strategies through sophisticated automation. In this role, you’ll move beyond traditional sales to act as a senior consultative advisor, using heart, intuit",
+    "hostedUrl": "https://jobs.lever.co/activecampaign/4b028fa8-d525-4c7c-a323-21cb7edd6fad",
+    "applyUrl": "https://jobs.lever.co/activecampaign/4b028fa8-d525-4c7c-a323-21cb7edd6fad/apply",
+    "country": "US",
+    "workplaceType": "hybrid",
+    "salaryRange": {
+      "min": 30.77,
+      "currency": "USD",
+      "interval": "per-hour-wage",
+      "max": 37.5
+    }
+  },
+  {
+    "id": "3ec8d60f-bdad-4a0b-88cc-e9d3a4db7a1e",
+    "text": "Commercial Counsel",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Accounting, Finance & Legal",
+      "location": "United States",
+      "team": "Legal",
+      "allLocations": [
+        "United States"
+      ]
+    },
+    "createdAt": 1779199282261,
+    "description": "",
+    "descriptionPlain": "",
+    "hostedUrl": "https://jobs.lever.co/activecampaign/3ec8d60f-bdad-4a0b-88cc-e9d3a4db7a1e",
+    "applyUrl": "https://jobs.lever.co/activecampaign/3ec8d60f-bdad-4a0b-88cc-e9d3a4db7a1e/apply",
+    "country": "US",
+    "workplaceType": "remote",
+    "salaryRange": {
+      "min": 168000,
+      "max": 210000,
+      "currency": "USD",
+      "interval": "per-year-salary"
+    }
+  }
+]
