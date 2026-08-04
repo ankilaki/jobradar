@@ -1,6 +1,7 @@
 export {
   matchesFilter,
   parseKeywordList,
+  resolveFilterExcludeKeywords,
   resolveFilterKeywords,
   sanitizeJobFilter,
 } from './jobFilter.js';

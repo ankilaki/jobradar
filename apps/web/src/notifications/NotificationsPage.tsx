@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import {
   parseKeywordList,
+  resolveFilterExcludeKeywords,
   resolveFilterKeywords,
   type JobFilter,
 } from '@jobradar/shared';
@@ -70,6 +71,7 @@ function SubscriptionForm({
 }) {
   const [webhook, setWebhook] = useState('');
   const [keywordsText, setKeywordsText] = useState('');
+  const [excludeKeywordsText, setExcludeKeywordsText] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -109,16 +111,20 @@ function SubscriptionForm({
     setBusy(true);
     try {
       const keywords = parseKeywordList(keywordsText);
+      const excludeKeywords = parseKeywordList(excludeKeywordsText);
       await onSave({
         discordWebhookUrl: webhook.trim(),
         filter: {
           keywords: keywords.length > 0 ? keywords : undefined,
+          excludeKeywords:
+            excludeKeywords.length > 0 ? excludeKeywords : undefined,
           remoteOnly: remoteOnly ? true : undefined,
         },
         active: true,
       });
       setWebhook('');
       setKeywordsText('');
+      setExcludeKeywordsText('');
       setRemoteOnly(false);
       setTestMsg('Subscription saved.');
     } catch (err) {
@@ -160,6 +166,21 @@ function SubscriptionForm({
           One per line or comma-separated. Alerts when any keyword matches.
         </span>
       </label>
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase text-ink-muted">
+          Exclude keywords (optional)
+        </span>
+        <textarea
+          value={excludeKeywordsText}
+          onChange={(e) => setExcludeKeywordsText(e.target.value)}
+          rows={2}
+          placeholder={'intern\njunior\ncontract'}
+          className="mt-1 w-full resize-y border-0 border-b border-rule bg-transparent px-0 py-2 text-sm outline-none focus:border-signal"
+        />
+        <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+          One per line or comma-separated. Skip jobs that match any of these.
+        </span>
+      </label>
       <button
         type="button"
         onClick={() => setRemoteOnly((v) => !v)}
@@ -193,9 +214,19 @@ function SubscriptionForm({
 
 function filterSummary(filter: JobFilter): string {
   const keywords = resolveFilterKeywords(filter);
-  if (keywords.length === 0) return 'All keywords';
-  if (keywords.length === 1) return `Keyword: ${keywords[0]}`;
-  return `Keywords: ${keywords.join(' · ')}`;
+  const excludes = resolveFilterExcludeKeywords(filter);
+  const includePart =
+    keywords.length === 0
+      ? 'All keywords'
+      : keywords.length === 1
+        ? `Keyword: ${keywords[0]}`
+        : `Keywords: ${keywords.join(' · ')}`;
+  if (excludes.length === 0) return includePart;
+  const excludePart =
+    excludes.length === 1
+      ? `Exclude: ${excludes[0]}`
+      : `Exclude: ${excludes.join(' · ')}`;
+  return `${includePart} · ${excludePart}`;
 }
 
 function SubscriptionRow({

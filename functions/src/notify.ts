@@ -1,7 +1,7 @@
 import { resolveFilterKeywords, matchesFilter, type JobFilter } from '@jobradar/shared';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './firebaseAdmin.js';
-import type { NormalizedJob } from './types.js';
+import type { JobLocation, NormalizedJob } from './types.js';
 
 interface SubDoc {
   id: string;
@@ -82,7 +82,7 @@ export function formatDiscordMessage(
         : `for ${keywords.map((k) => `"${k}"`).join(' / ')}`;
   const shown = jobs.slice(0, 10);
   const lines = shown.map(
-    (j) => `• **${j.companyName}** — ${j.title}`,
+    (j) => `• **${j.companyName}** — ${j.title} — ${formatJobLocation(j.location)}`,
   );
   const more =
     jobs.length > shown.length ? `\n_+${jobs.length - shown.length} more_` : '';
@@ -93,6 +93,31 @@ export function formatDiscordMessage(
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/** Human-readable location for Discord lines (mirrors web feed formatting). */
+export function formatJobLocation(loc: JobLocation): string {
+  const cities = loc.allCities?.length
+    ? loc.allCities
+    : loc.city
+      ? [loc.city]
+      : [];
+
+  if (cities.length > 1) {
+    const shown = cities.slice(0, 3).join(' · ');
+    const more = cities.length > 3 ? ` +${cities.length - 3}` : '';
+    return loc.isRemote ? `Remote · ${shown}${more}` : `${shown}${more}`;
+  }
+
+  if (loc.isRemote && !cities.length) {
+    return loc.country ? `Remote · ${loc.country}` : 'Remote';
+  }
+  if (loc.city && loc.state) return `${loc.city}, ${loc.state}`;
+  if (loc.city && loc.country) return `${loc.city}, ${loc.country}`;
+  if (loc.city) return loc.city;
+  if (loc.isRemote && loc.country) return `Remote · ${loc.country}`;
+  if (loc.country) return loc.country;
+  return loc.raw || 'Unknown';
 }
 
 export async function postDiscordWebhook(

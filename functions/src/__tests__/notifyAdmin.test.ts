@@ -33,6 +33,37 @@ describe('formatDiscordMessage', () => {
     expect(msg).toContain('Stripe');
     expect(msg).toContain('Ramp');
   });
+
+  it('includes location for each role', () => {
+    const jobs = [
+      job({
+        id: '1',
+        title: 'SWE',
+        companyId: 'a',
+        companyName: 'Stripe',
+        location: {
+          raw: 'New York, NY',
+          city: 'New York',
+          state: 'NY',
+          isRemote: false,
+        },
+      }),
+      job({
+        id: '2',
+        title: 'PM',
+        companyId: 'b',
+        companyName: 'Ramp',
+        location: {
+          raw: 'Remote',
+          isRemote: true,
+          workplaceType: 'Remote',
+        },
+      }),
+    ];
+    const msg = formatDiscordMessage(jobs, { keyword: 'engineer' });
+    expect(msg).toContain('Stripe** — SWE — New York, NY');
+    expect(msg).toContain('Ramp** — PM — Remote');
+  });
 });
 
 describe('postDiscordWebhook', () => {

@@ -95,6 +95,24 @@ describe('matchesFilter', () => {
       matchesFilter(baseJob, { keywords: ['designer', 'product'] }),
     ).toBe(false);
   });
+
+  it('rejects when any exclude keyword matches title or description', () => {
+    expect(matchesFilter(baseJob, { excludeKeyword: 'intern' })).toBe(true);
+    expect(matchesFilter(baseJob, { excludeKeyword: 'software' })).toBe(false);
+    expect(matchesFilter(baseJob, { excludeKeyword: 'backend' })).toBe(false);
+    expect(
+      matchesFilter(baseJob, {
+        keywords: ['software'],
+        excludeKeywords: ['intern', 'backend'],
+      }),
+    ).toBe(false);
+    expect(
+      matchesFilter(baseJob, {
+        keywords: ['software'],
+        excludeKeywords: ['intern', 'manager'],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('parseKeywordList / sanitizeJobFilter', () => {
@@ -111,6 +129,8 @@ describe('parseKeywordList / sanitizeJobFilter', () => {
       sanitizeJobFilter({
         keywords: [],
         keyword: '',
+        excludeKeywords: [],
+        excludeKeyword: '',
         remoteOnly: undefined,
       }),
     ).toEqual({});
@@ -124,6 +144,22 @@ describe('parseKeywordList / sanitizeJobFilter', () => {
     ).toEqual({
       keywords: ['a', 'b'],
       remoteOnly: true,
+    });
+    expect(
+      sanitizeJobFilter({
+        keywords: ['engineer'],
+        excludeKeywords: ['intern'],
+      }),
+    ).toEqual({
+      keyword: 'engineer',
+      excludeKeyword: 'intern',
+    });
+    expect(
+      sanitizeJobFilter({
+        excludeKeywords: ['intern', 'junior'],
+      }),
+    ).toEqual({
+      excludeKeywords: ['intern', 'junior'],
     });
   });
 });

@@ -14,6 +14,10 @@ export interface JobFilter {
   keyword?: string;
   /** OR-matched keywords (any term may match title or description). */
   keywords?: string[];
+  /** Single exclude term (legacy). Prefer `excludeKeywords` for multi-term alerts. */
+  excludeKeyword?: string;
+  /** OR-matched exclude terms — job is rejected if any hit title or description. */
+  excludeKeywords?: string[];
   city?: string;
   state?: string;
   country?: string;
@@ -53,8 +57,10 @@ export function parseKeywordList(raw: string): string[] {
   return out;
 }
 
-/** Resolve keyword + keywords into a deduped list (order preserved). */
-export function resolveFilterKeywords(filter: JobFilter): string[] {
+function resolveKeywordList(
+  multi: string[] | undefined,
+  single: string | undefined,
+): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (raw: string) => {
@@ -65,14 +71,36 @@ export function resolveFilterKeywords(filter: JobFilter): string[] {
     seen.add(key);
     out.push(t);
   };
-  for (const k of filter.keywords ?? []) push(k);
-  if (filter.keyword) push(filter.keyword);
+  for (const k of multi ?? []) push(k);
+  if (single) push(single);
   return out;
+}
+
+/** Resolve keyword + keywords into a deduped list (order preserved). */
+export function resolveFilterKeywords(filter: JobFilter): string[] {
+  return resolveKeywordList(filter.keywords, filter.keyword);
+}
+
+/** Resolve excludeKeyword + excludeKeywords into a deduped list (order preserved). */
+export function resolveFilterExcludeKeywords(filter: JobFilter): string[] {
+  return resolveKeywordList(filter.excludeKeywords, filter.excludeKeyword);
+}
+
+function textMatchesAnyKeyword(
+  title: string,
+  desc: string,
+  terms: string[],
+): boolean {
+  return terms.some((k) => {
+    const lk = k.toLowerCase();
+    return title.includes(lk) || desc.includes(lk);
+  });
 }
 
 /**
  * Strip undefined / empty fields so the result is safe to write to Firestore.
- * Multi-keyword filters store `keywords` only (not a redundant `keyword`).
+ * Multi-keyword filters store `keywords` / `excludeKeywords` only (not a
+ * redundant singular field).
  */
 export function sanitizeJobFilter(filter: JobFilter): JobFilter {
   const out: JobFilter = {};
@@ -81,6 +109,13 @@ export function sanitizeJobFilter(filter: JobFilter): JobFilter {
     out.keyword = keywords[0];
   } else if (keywords.length > 1) {
     out.keywords = keywords;
+  }
+
+  const excludeKeywords = resolveFilterExcludeKeywords(filter);
+  if (excludeKeywords.length === 1) {
+    out.excludeKeyword = excludeKeywords[0];
+  } else if (excludeKeywords.length > 1) {
+    out.excludeKeywords = excludeKeywords;
   }
 
   if (filter.city?.trim()) out.city = filter.city.trim();
@@ -97,20 +132,26 @@ export function sanitizeJobFilter(filter: JobFilter): JobFilter {
  * Shared predicate for feed filtering and Discord notification matching.
  * Empty / undefined filter fields mean "no constraint".
  * Keywords are OR-matched (any term may hit title or description).
+ * Exclude keywords are OR-matched — any hit rejects the job.
  * City/state/country match if primary OR any all* entry matches (case-insensitive).
  * Cities are compared via canonicalizeCity so NYC / New York City / new-york match.
  * States are compared via canonicalizeState so "New York" / "NY" match.
  */
 export function matchesFilter(job: FilterableJob, filter: JobFilter): boolean {
+  const title = job.title.toLowerCase();
+  const desc = job.descriptionPlain.toLowerCase();
+
   const keywords = resolveFilterKeywords(filter);
-  if (keywords.length > 0) {
-    const title = job.title.toLowerCase();
-    const desc = job.descriptionPlain.toLowerCase();
-    const hit = keywords.some((k) => {
-      const lk = k.toLowerCase();
-      return title.includes(lk) || desc.includes(lk);
-    });
-    if (!hit) return false;
+  if (keywords.length > 0 && !textMatchesAnyKeyword(title, desc, keywords)) {
+    return false;
+  }
+
+  const excludeKeywords = resolveFilterExcludeKeywords(filter);
+  if (
+    excludeKeywords.length > 0 &&
+    textMatchesAnyKeyword(title, desc, excludeKeywords)
+  ) {
+    return false;
   }
 
   if (filter.remoteOnly && !job.location.isRemote) return false;
