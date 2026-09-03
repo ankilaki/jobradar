@@ -1,6 +1,7 @@
 import {
   FieldValue,
   type DocumentReference,
+  type DocumentSnapshot,
   type Firestore,
   type UpdateData,
   type DocumentData,
@@ -18,7 +19,7 @@ import {
   fetchLinkedInCompanyJobs,
   normalizeLinkedInJobs,
 } from './sources/linkedin.js';
-import { planSyncPrecise } from './syncPlan.js';
+import { diffActiveJobIds } from './syncPlan.js';
 import type { CompanyRecord, NormalizedJob } from './types.js';
 
 export interface SyncOneResult {
@@ -28,9 +29,13 @@ export interface SyncOneResult {
   newJobs: NormalizedJob[];
   upserted: number;
   closed: number;
+  skipped: number;
 }
 
 const MAX_BATCH_OPS = 450;
+const GET_ALL_CHUNK = 100;
+/** Public ATS: don't rewrite lastSyncedAt every hour if the board didn't change. */
+const COMPANY_HEARTBEAT_MS = 20 * 60 * 60 * 1000;
 
 async function fetchNormalizedJobs(
   company: CompanyRecord,
@@ -88,31 +93,31 @@ export async function syncOneCompany(
 
   try {
     const fetchedJobs = await fetchNormalizedJobs(company, deps);
+    const fetchedById = new Map(fetchedJobs.map((j) => [j.id, j]));
+    const fetchedIds = fetchedJobs.map((j) => j.id);
 
-    const existingSnap = await db
-      .collection('jobs')
-      .where('companyId', '==', company.id)
-      .get();
+    const trackedIds = Array.isArray(company.activeJobIds)
+      ? company.activeJobIds
+      : await loadActiveJobIds(db, company.id);
 
-    const existingIds = new Set(existingSnap.docs.map((d) => d.id));
-    const previouslyActiveIds = new Set(
-      existingSnap.docs
-        .filter((d) => d.data().isActive === true)
-        .map((d) => d.id),
-    );
-
-    const plan = planSyncPrecise({
-      existingIds,
-      previouslyActiveIds,
-      fetchedJobs,
+    const { toOpen, toClose } = diffActiveJobIds({
+      activeJobIds: trackedIds,
+      fetchedIds,
     });
 
+    const existingOpenSnaps = await getJobSnaps(db, toOpen);
     const writer = new BatchWriter(db);
+    const newJobs: NormalizedJob[] = [];
+    let upserted = 0;
 
-    for (const action of plan.upserts) {
-      const ref = db.collection('jobs').doc(action.job.id);
-      const base = serializeJob(action.job);
-      if (action.type === 'create') {
+    for (const id of toOpen) {
+      const job = fetchedById.get(id);
+      if (!job) continue;
+      const ref = db.collection('jobs').doc(id);
+      const existing = existingOpenSnaps.get(id);
+      const base = serializeJob(job);
+
+      if (!existing?.exists) {
         writer.set(ref, {
           ...base,
           firstSeenAt: FieldValue.serverTimestamp(),
@@ -120,45 +125,59 @@ export async function syncOneCompany(
           isActive: true,
           closedAt: null,
         });
-      } else {
-        writer.set(
-          ref,
-          {
-            ...base,
-            lastSeenAt: FieldValue.serverTimestamp(),
-            isActive: true,
-            closedAt: null,
-          },
-          { merge: true },
-        );
+        newJobs.push(job);
+        upserted += 1;
+        continue;
       }
+
+      const wasActive = existing.data()?.isActive === true;
+      writer.set(
+        ref,
+        {
+          ...base,
+          lastSeenAt: FieldValue.serverTimestamp(),
+          isActive: true,
+          closedAt: null,
+        },
+        { merge: true },
+      );
+      upserted += 1;
+      if (!wasActive) newJobs.push(job);
     }
 
-    for (const id of plan.toClose) {
-      writer.update(db.collection('jobs').doc(id), {
-        isActive: false,
-        closedAt: FieldValue.serverTimestamp(),
-      });
+    for (const id of toClose) {
+      writer.set(
+        db.collection('jobs').doc(id),
+        {
+          isActive: false,
+          closedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
 
-    writer.set(
-      db.collection('companies').doc(company.id),
-      {
-        lastSyncedAt: FieldValue.serverTimestamp(),
-        lastSyncStatus: 'ok',
-        lastSyncError: FieldValue.delete(),
-      },
-      { merge: true },
-    );
+    if (shouldWriteCompanyDoc(company, toOpen.length, toClose.length)) {
+      writer.set(
+        db.collection('companies').doc(company.id),
+        {
+          activeJobIds: fetchedIds,
+          lastSyncedAt: FieldValue.serverTimestamp(),
+          lastSyncStatus: 'ok',
+          lastSyncError: FieldValue.delete(),
+        },
+        { merge: true },
+      );
+    }
 
     await writer.commit();
 
     return {
       companyId: company.id,
       ok: true,
-      newJobs: plan.newJobs,
-      upserted: plan.upserts.length,
-      closed: plan.toClose.length,
+      newJobs,
+      upserted,
+      closed: toClose.length,
+      skipped: Math.max(0, fetchedJobs.length - toOpen.length),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -181,8 +200,51 @@ export async function syncOneCompany(
       newJobs: [],
       upserted: 0,
       closed: 0,
+      skipped: 0,
     };
   }
+}
+
+/** True when the company doc needs a write (IDs / status / LinkedIn due-time). */
+export function shouldWriteCompanyDoc(
+  company: CompanyRecord,
+  opened: number,
+  closed: number,
+): boolean {
+  if (opened > 0 || closed > 0) return true;
+  if (!Array.isArray(company.activeJobIds)) return true;
+  if (company.lastSyncStatus !== 'ok') return true;
+  if (company.ats === 'linkedin') return true;
+  if (!company.lastSyncedAt) return true;
+  const ageMs = Date.now() - company.lastSyncedAt.getTime();
+  return Number.isNaN(ageMs) || ageMs >= COMPANY_HEARTBEAT_MS;
+}
+
+async function loadActiveJobIds(
+  db: Firestore,
+  companyId: string,
+): Promise<string[]> {
+  const snap = await db
+    .collection('jobs')
+    .where('companyId', '==', companyId)
+    .get();
+  return snap.docs.filter((d) => d.data().isActive === true).map((d) => d.id);
+}
+
+async function getJobSnaps(
+  db: Firestore,
+  ids: string[],
+): Promise<Map<string, DocumentSnapshot>> {
+  const out = new Map<string, DocumentSnapshot>();
+  if (ids.length === 0) return out;
+
+  for (let i = 0; i < ids.length; i += GET_ALL_CHUNK) {
+    const chunk = ids.slice(i, i + GET_ALL_CHUNK);
+    const refs = chunk.map((id) => db.collection('jobs').doc(id));
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) out.set(snap.id, snap);
+  }
+  return out;
 }
 
 class BatchWriter {

@@ -52,6 +52,9 @@ async function getActiveCompanies(): Promise<CompanyWithSyncMeta[]> {
         status === 'ok' || status === 'error' ? status : null,
       lastSyncError:
         typeof data.lastSyncError === 'string' ? data.lastSyncError : null,
+      activeJobIds: Array.isArray(data.activeJobIds)
+        ? data.activeJobIds.map((id: unknown) => String(id))
+        : undefined,
     };
   });
 }
@@ -65,6 +68,9 @@ async function runSyncJobBoards(): Promise<{
   linkedinDue: number;
   linkedinSynced: number;
   newJobs: number;
+  upserted: number;
+  closed: number;
+  skipped: number;
   notified: number;
   errors: string[];
 }> {
@@ -107,6 +113,9 @@ async function runSyncJobBoards(): Promise<{
     ...linkedinResults,
   ];
   const newJobs = results.flatMap((r) => r.newJobs);
+  const upserted = results.reduce((n, r) => n + r.upserted, 0);
+  const closed = results.reduce((n, r) => n + r.closed, 0);
+  const skipped = results.reduce((n, r) => n + r.skipped, 0);
   const errors = results
     .filter((r) => !r.ok)
     .map((r) => `${r.companyId}: ${r.error ?? 'unknown'}`);
@@ -126,6 +135,9 @@ async function runSyncJobBoards(): Promise<{
     linkedinDue: linkedinDue.length,
     linkedinSynced: linkedinResults.length,
     newJobs: newJobs.length,
+    upserted,
+    closed,
+    skipped,
     notified,
     errors,
   };

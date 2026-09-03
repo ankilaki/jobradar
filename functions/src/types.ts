@@ -55,6 +55,12 @@ export interface CompanyRecord {
   lastSyncedAt?: Date | null;
   lastSyncStatus?: 'ok' | 'error' | null;
   lastSyncError?: string | null;
+  /**
+   * IDs of jobs currently considered open for this company.
+   * Used so hourly sync can create/close without re-reading every job doc.
+   * `undefined` means the field has never been written (bootstrap on next sync).
+   */
+  activeJobIds?: string[];
 }
 
 export function jobDocId(ats: Ats, companyId: string, externalId: string): string {

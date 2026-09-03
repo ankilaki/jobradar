@@ -38,3 +38,24 @@ export function planSyncPrecise(opts: {
   const toClose = [...opts.previouslyActiveIds].filter((id) => !seenIds.has(id));
   return { upserts, toClose, newJobs };
 }
+
+/**
+ * Hourly sync only needs to know which job IDs appeared or disappeared.
+ * Unchanged IDs are left untouched — no Firestore read or write per job.
+ */
+export function diffActiveJobIds(opts: {
+  activeJobIds: Iterable<string>;
+  fetchedIds: Iterable<string>;
+}): { toOpen: string[]; toClose: string[] } {
+  const active = new Set(opts.activeJobIds);
+  const fetched: string[] = [];
+  const fetchedSet = new Set<string>();
+  for (const id of opts.fetchedIds) {
+    if (fetchedSet.has(id)) continue;
+    fetchedSet.add(id);
+    fetched.push(id);
+  }
+  const toOpen = fetched.filter((id) => !active.has(id));
+  const toClose = [...active].filter((id) => !fetchedSet.has(id));
+  return { toOpen, toClose };
+}

@@ -7,7 +7,8 @@ import { htmlToPlain, decodeHtmlEntities } from '../html.js';
 import { parseSalaryRaw } from '../salary.js';
 import { normalizeAshbyJobs } from '../sources/ashby.js';
 import { normalizeGreenhouseJobs } from '../sources/greenhouse.js';
-import { planSyncPrecise } from '../syncPlan.js';
+import { planSyncPrecise, diffActiveJobIds } from '../syncPlan.js';
+import { shouldWriteCompanyDoc } from '../syncOneCompany.js';
 import type { CompanyRecord, NormalizedJob } from '../types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -145,5 +146,67 @@ describe('planSyncPrecise', () => {
     expect(run2.newJobs.map((j) => j.id)).toEqual(['c']);
     expect(run2.toClose).toEqual(['b']);
     expect(run2.upserts.find((u) => u.job.id === 'a')?.type).toBe('update');
+  });
+});
+
+describe('diffActiveJobIds', () => {
+  it('opens C, closes B, ignores unchanged A', () => {
+    const { toOpen, toClose } = diffActiveJobIds({
+      activeJobIds: ['a', 'b'],
+      fetchedIds: ['a', 'c'],
+    });
+    expect(toOpen).toEqual(['c']);
+    expect(toClose).toEqual(['b']);
+  });
+
+  it('no-ops when the board is unchanged', () => {
+    const { toOpen, toClose } = diffActiveJobIds({
+      activeJobIds: ['a', 'b'],
+      fetchedIds: ['b', 'a'],
+    });
+    expect(toOpen).toEqual([]);
+    expect(toClose).toEqual([]);
+  });
+
+  it('treats the whole board as new when nothing is tracked yet', () => {
+    const { toOpen, toClose } = diffActiveJobIds({
+      activeJobIds: [],
+      fetchedIds: ['a', 'b'],
+    });
+    expect(toOpen).toEqual(['a', 'b']);
+    expect(toClose).toEqual([]);
+  });
+});
+
+describe('shouldWriteCompanyDoc', () => {
+  const base = {
+    id: 'stripe',
+    name: 'Stripe',
+    ats: 'greenhouse' as const,
+    boardToken: 'stripe',
+    active: true,
+    lastSyncStatus: 'ok' as const,
+    lastSyncedAt: new Date(),
+    activeJobIds: ['a'],
+  };
+
+  it('skips hourly heartbeat when a public ATS board is unchanged', () => {
+    expect(shouldWriteCompanyDoc(base, 0, 0)).toBe(false);
+  });
+
+  it('writes when jobs opened or closed', () => {
+    expect(shouldWriteCompanyDoc(base, 1, 0)).toBe(true);
+    expect(shouldWriteCompanyDoc(base, 0, 1)).toBe(true);
+  });
+
+  it('always writes LinkedIn so due-time stays accurate', () => {
+    expect(
+      shouldWriteCompanyDoc({ ...base, ats: 'linkedin' }, 0, 0),
+    ).toBe(true);
+  });
+
+  it('writes on first run before activeJobIds exist', () => {
+    const { activeJobIds: _ignored, ...rest } = base;
+    expect(shouldWriteCompanyDoc(rest, 0, 0)).toBe(true);
   });
 });
